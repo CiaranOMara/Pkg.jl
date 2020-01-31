@@ -729,6 +729,7 @@ function download_artifact(
     tarball_hash::Union{String, Nothing} = nothing;
     verbose::Bool = false,
     quiet_download::Bool = false,
+    unpack_artifact::Bool = true,
 )
     if artifact_exists(tree_hash)
         return true
@@ -747,8 +748,12 @@ function download_artifact(
         # hash.  This will be fixed in a future Julia release which will properly interrogate
         # the filesystem ACLs for executable permissions, which git tree hashes care about.
         try
-            download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true,
-                                   verbose=verbose, quiet_download=quiet_download)
+            if unpack_artifact
+                download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose,quiet_download=quiet_download)
+            else
+                download_verify(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
+            end
+
         catch e
             # Clean that destination directory out if something went wrong
             rm(dest_dir; force=true, recursive=true)
@@ -768,7 +773,11 @@ function download_artifact(
         # `create_artifact()` wrapper does, so we use that here.
         calc_hash = try
             create_artifact() do dir
-                download_verify_unpack(tarball_url, tarball_hash, dir, ignore_existence=true, verbose=verbose)
+                if unpack_artifact
+                    download_verify_unpack(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
+                else
+                    download_verify(tarball_url, tarball_hash, dest_dir, ignore_existence=true, verbose=verbose, quiet_download=quiet_download)
+                end
             end
         catch e
             if isa(e, InterruptException)
@@ -886,8 +895,9 @@ function ensure_artifact_installed(name::String, meta::Dict, artifacts_toml::Str
         for entry in meta["download"]
             url = entry["url"]
             tarball_hash = entry["sha256"]
+            unpack_artifact = get(entry, "unpack", true)
             download_success = with_show_download_info(name, quiet_download) do
-                download_artifact(hash, url, tarball_hash; verbose=verbose, quiet_download=quiet_download)
+                download_artifact(hash, url, tarball_hash; unpack_artifact=unpack_artifact, verbose=verbose, quiet_download=quiet_download)
             end
             download_success && return artifact_path(hash)
         end
